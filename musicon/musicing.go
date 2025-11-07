@@ -2,7 +2,9 @@ package musicon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"naevis/db"
 	"naevis/utils"
 	"net/http"
@@ -162,22 +164,85 @@ func DeletePlaylist(w http.ResponseWriter, r *http.Request, ps httprouter.Params
 }
 
 func AddSongToPlaylist(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	userID := utils.GetUserIDFromRequest(r)
 	playlistID := ps.ByName("playlistid")
-	songID := ps.ByName("songid")
+	userID := utils.GetUserIDFromRequest(r)
+
+	var body struct {
+		SongID string `json:"songid"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+
+	if body.SongID == "" {
+		respondError(w, http.StatusBadRequest, "Missing song ID")
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
 	filter := bson.M{"playlistid": playlistID, "userid": userID}
-	update := bson.M{"$addToSet": bson.M{"songs": songID}, "$set": bson.M{"updatedAt": time.Now()}}
+	update := bson.M{
+		"$addToSet": bson.M{"songs": body.SongID},
+		"$set":      bson.M{"updatedAt": time.Now()},
+	}
+
 	res, err := db.PlaylistsCollection.UpdateOne(ctx, filter, update)
 	if err != nil || res.MatchedCount == 0 {
 		respondError(w, http.StatusForbidden, "Playlist not found or unauthorized")
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]string{"playlist_id": playlistID, "song_id": songID}, "Song added to playlist")
+	respondJSON(w, http.StatusOK, map[string]string{
+		"playlist_id": playlistID,
+		"song_id":     body.SongID,
+	}, "Song added to playlist")
+}
+
+func SetUserLikes(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	userID := utils.GetUserIDFromRequest(r)
+	songID := ps.ByName("songid")
+	playlistID := fmt.Sprintf("likes_%s", userID)
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	filter := bson.M{
+		"playlistid": playlistID,
+		"userid":     userID,
+	}
+
+	update := bson.M{
+		"$addToSet": bson.M{"songs": songID},
+		"$set": bson.M{
+			"updatedAt": time.Now(),
+			"name":      "Liked Songs",
+		},
+		"$setOnInsert": bson.M{
+			"createdAt":   time.Now(),
+			"description": "Auto-generated playlist for liked songs",
+			"public":      false,
+		},
+	}
+
+	opts := options.Update().SetUpsert(true)
+
+	res, err := db.PlaylistsCollection.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	if res.UpsertedCount > 0 {
+		log.Printf("Created new likes playlist for user %s", userID)
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"playlist_id": playlistID,
+		"song_id":     songID,
+	}, "Song added to liked songs")
 }
 
 func RemoveSongFromPlaylist(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {

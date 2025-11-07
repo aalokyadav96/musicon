@@ -16,7 +16,9 @@ func AddMusicRoutes(router *httprouter.Router, rateLimiter *ratelim.RateLimiter)
 	router.DELETE("/api/v1/musicon/playlists/:playlistid", rateLimiter.Limit(middleware.Authenticate(musicon.DeletePlaylist)))
 
 	// Add / Remove songs to playlist
-	router.POST("/api/v1/musicon/playlists/:playlistid/songs/:songid", rateLimiter.Limit(middleware.Authenticate(musicon.AddSongToPlaylist)))
+	// router.POST("/api/v1/musicon/playlists/:playlistid/songs/:songid", rateLimiter.Limit(middleware.Authenticate(musicon.AddSongToPlaylist)))
+	router.POST("/api/v1/musicon/playlists/:playlistid/songs", rateLimiter.Limit(middleware.Authenticate(musicon.AddSongToPlaylist)))
+	router.POST("/api/v1/musicon/user/liked/:songid", rateLimiter.Limit(middleware.OptionalAuth(musicon.SetUserLikes)))
 	router.DELETE("/api/v1/musicon/playlists/:playlistid/songs/:songid", rateLimiter.Limit(middleware.Authenticate(musicon.RemoveSongFromPlaylist)))
 
 	// Playlist details

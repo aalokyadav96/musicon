@@ -48,7 +48,7 @@ func main() {
 	}
 
 	// initialize rate limiter
-	rateLimiter := ratelim.NewRateLimiter(1, 6, 10*time.Minute, 10000)
+	rateLimiter := ratelim.NewRateLimiter(1, 12, 10*time.Minute, 10000)
 
 	// build router and add chat routes with hub
 	router := setupRouter(rateLimiter)
